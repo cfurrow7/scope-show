@@ -28,7 +28,7 @@ export const MAX_MESSAGE = 600;
 // The event's name: browser tab and opening heading. Optional; without it the
 // page keeps its generic title.
 export const MAX_TITLE = 90;
-export const DEFAULT_TITLE = 'For your oscilloscope';
+export const DEFAULT_TITLE = 'The Retrospects, Private Lives, DJ Luke, Henry Arlingtons. Ottawa, Fri Nov 6';
 
 // Transition styles: 'morph' point-lerps page into page; 'static' blows the
 // outgoing page apart into fuzz before the next one draws on; 'warp' swirls

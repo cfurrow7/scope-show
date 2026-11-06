@@ -847,30 +847,26 @@ function recordFrame(f) {
 //
 // Faster than real time: the show is stepped on a fixed 1/30 s clock as fast
 // as the device can go, each frame is encoded with the browser's own H.264
-// encoder (WebCodecs), the scope signal is synthesized offline by the same
-// math the worklet runs, and mp4-muxer (vendored, MIT) packs the two into an
-// MP4. Browsers without WebCodecs fall back to the real-time recorder above.
+// encoder (WebCodecs) and the scope signal is synthesized offline by the same
+// math the worklet runs. Browsers without WebCodecs fall back to the real-time recorder above.
 
 const FPS = 30;
 const AUDIO_RATE = 48000;
 let cancelRender = false;
 
-async function pickVideoCodec(w, h) {
-  if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined') return null;
-  for (const codec of ['avc1.640028', 'avc1.4d0028', 'avc1.42e028']) {
-    try {
-      const r = await VideoEncoder.isConfigSupported({ codec, width: w, height: h, bitrate: 8e6, framerate: FPS, avc: { format: 'avc' } });
-      if (r.supported) return codec;
-    } catch { /* try the next profile */ }
-  }
-  return null;
-}
+// The encoders are found through mediabunny (vendored, MPL-2.0), loaded only
+// when someone renders. Video is H.264 everywhere WebCodecs exists. Audio is
+// uncompressed 16-bit PCM in a MOV (no browser AAC encoder needed, which
+// iPhone Safari lacks, and lossless, which a scope needs). Photos, Files and
+// Instagram all take MOV natively.
+let mbLib = null;
+const loadMb = async () => (mbLib ||= await import('./vendor/mediabunny.min.mjs'));
 
-async function audioEncodable() {
-  if (typeof AudioEncoder === 'undefined' || typeof AudioData === 'undefined') return false;
+async function canRenderOffline(w, h) {
+  if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined') return false;
   try {
-    const r = await AudioEncoder.isConfigSupported({ codec: 'mp4a.40.2', sampleRate: AUDIO_RATE, numberOfChannels: 2, bitrate: 128000 });
-    return !!r.supported;
+    const mb = await loadMb();
+    return await mb.canEncodeVideo('avc', { width: w, height: h, bitrate: 8e6 });
   } catch { return false; }
 }
 
@@ -915,37 +911,43 @@ class OfflineSynth {
   }
 }
 
-async function renderOffline(codec) {
-  const withAudio = !recMute.checked && await audioEncodable();
-  const [w, h] = REC_SIZES[recShape.value];
-  const { Muxer, ArrayBufferTarget } = await import('./vendor/mp4-muxer.mjs');
-  const muxer = new Muxer({
-    target: new ArrayBufferTarget(),
-    video: { codec: 'avc', width: w, height: h, frameRate: FPS },
-    ...(withAudio ? { audio: { codec: 'aac', numberOfChannels: 2, sampleRate: AUDIO_RATE } } : {}),
-    fastStart: 'in-memory',
-    firstTimestampBehavior: 'offset',
-  });
-  let failure = null;
-  const venc = new VideoEncoder({
-    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-    error: (e) => { failure = e; },
-  });
-  venc.configure({ codec, width: w, height: h, bitrate: 8e6, framerate: FPS, avc: { format: 'avc' } });
-  let aenc = null;
-  if (withAudio) {
-    aenc = new AudioEncoder({
-      output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
-      error: (e) => { failure = e; },
-    });
-    aenc.configure({ codec: 'mp4a.40.2', sampleRate: AUDIO_RATE, numberOfChannels: 2, bitrate: 128000 });
-  }
+// The big progress bar across the screen while a render runs, with its own
+// Stop at the right.
+const renderBar = document.getElementById('render-bar');
+const renderFill = document.getElementById('render-fill');
+const renderText = document.getElementById('render-text');
+const renderStop = document.getElementById('render-stop');
+renderStop.addEventListener('click', () => { cancelRender = true; });
+function showProgress(frac, label) {
+  renderFill.style.width = `${(frac * 100).toFixed(1)}%`;
+  renderText.textContent = label;
+}
 
+async function renderOffline() {
+  const mb = await loadMb();
+  const wantAudio = !recMute.checked;
+  const [w, h] = REC_SIZES[recShape.value];
+  // The soundtrack IS the scope signal, so it goes in lossless: 16-bit PCM in
+  // a MOV. Measured: AAC smeared the lettering when its audio was played back
+  // as XY; PCM redraws the page exactly. Without audio it is a plain MP4.
+  const aac = false;
+  const mov = wantAudio;
+  const output = new mb.Output({
+    format: mov ? new mb.MovOutputFormat({ fastStart: 'in-memory' }) : new mb.Mp4OutputFormat({ fastStart: 'in-memory' }),
+    target: new mb.BufferTarget(),
+  });
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
   const c = canvas.getContext('2d');
   const r = Math.min(w, h) * 0.42;
+  const video = new mb.CanvasSource(canvas, { codec: 'avc', bitrate: 8e6, keyFrameInterval: 2 });
+  output.addVideoTrack(video, { frameRate: FPS });
+  let audio = null;
+  if (wantAudio) {
+    audio = new mb.AudioSampleSource(aac ? { codec: 'aac', bitrate: 128000 } : { codec: 'pcm-s16' });
+    output.addAudioTrack(audio);
+  }
 
   // Take the show clock, start it from the top, and give it back afterwards.
   const saved = { simT, motionT, pageIndex, mix, phase, phaseStart, lastBeatAt: state.lastBeatAt };
@@ -963,42 +965,44 @@ async function renderOffline(codec) {
   const perFrame = AUDIO_RATE / FPS;
   const synth = new OfflineSynth();
   const t0 = performance.now();
+  renderBar.hidden = false;
+  showProgress(0, 'Rendering 0%');
+  let failure = null;
   let done = 0;
   try {
+    await output.start();
     for (let i = 0; i < total; i++) {
-      if (cancelRender || failure) break;
+      if (cancelRender) break;
       const f = step(1 / FPS, null);
       paintTo(c, w, h, h / 2, r, r / 160, f);
-      const timestamp = Math.round(i * 1e6 / FPS);
-      const vf = new VideoFrame(canvas, { timestamp, duration: Math.round(1e6 / FPS) });
-      venc.encode(vf, { keyFrame: i % (FPS * 2) === 0 });
-      vf.close();
-      if (aenc) {
+      await video.add(i / FPS, 1 / FPS);
+      if (audio) {
         const data = synth.render(f.table, f.p, perFrame);
-        const ad = new AudioData({ format: 'f32-planar', sampleRate: AUDIO_RATE, numberOfFrames: perFrame, numberOfChannels: 2, timestamp, data });
-        aenc.encode(ad);
-        ad.close();
+        const sample = new mb.AudioSample({ data, format: 'f32-planar', numberOfChannels: 2, sampleRate: AUDIO_RATE, timestamp: i / FPS });
+        await audio.add(sample);
+        sample.close();
       }
       done = i + 1;
-      while (venc.encodeQueueSize > 6) await new Promise(res => setTimeout(res, 2));
-      if (i % 15 === 0) {
-        recStatus.textContent = `Rendering ${Math.round(100 * done / total)}%...`;
+      if (i % 10 === 0) {
+        const pct = Math.round(100 * done / total);
+        showProgress(done / total, `Rendering ${pct}%   ${Math.floor(done / FPS)} / ${Math.round(total / FPS)}s`);
         await new Promise(res => setTimeout(res, 0));
       }
     }
-    if (!failure) {
-      await venc.flush();
-      if (aenc) await aenc.flush();
+    if (cancelRender) await output.cancel();
+    else {
+      showProgress(1, 'Finishing the file...');
+      await output.finalize();
     }
   } catch (e) {
-    failure = failure || e;
+    failure = e;
+    try { await output.cancel(); } catch { /* already gone */ }
   } finally {
-    try { venc.close(); } catch { /* already closed */ }
-    try { aenc?.close(); } catch { /* already closed */ }
     ({ simT, motionT, pageIndex, mix, phase, phaseStart } = saved);
     state.lastBeatAt = saved.lastBeatAt;
     tableCache.clear();
     rendering = false;
+    renderBar.hidden = true;
     recBtn.classList.remove('recording');
     recBtn.textContent = recLabel(false);
   }
@@ -1007,12 +1011,13 @@ async function renderOffline(codec) {
     recStatus.textContent = failure ? `Render failed: ${failure.message || failure}` : 'Stopped.';
     return;
   }
-  muxer.finalize();
-  recBlob = new Blob([muxer.target.buffer], { type: 'video/mp4' });
-  recName = `scope-show-${recShape.value}-${recLoops.value}x.mp4`;
+  const ext = mov ? 'mov' : 'mp4';
+  recBlob = new Blob([output.target.buffer], { type: mov ? 'video/quicktime' : 'video/mp4' });
+  recName = `scope-show-${recShape.value}-${recLoops.value}x.${ext}`;
   const secs = ((performance.now() - t0) / 1000).toFixed(1);
-  const mb = (recBlob.size / 1e6).toFixed(1);
-  recStatus.textContent = `Done: ${(done / FPS).toFixed(0)}s of video in ${secs}s, ${mb} MB${withAudio ? '' : ', no audio'}.`;
+  const mb2 = (recBlob.size / 1e6).toFixed(1);
+  const sound = wantAudio ? ', lossless scope audio (MOV)' : ', no audio';
+  recStatus.textContent = `Done: ${(done / FPS).toFixed(0)}s of video in ${secs}s, ${mb2} MB${sound}.`;
   recBtn.textContent = recLabel(true);
   saveBtn.hidden = false;
 }
@@ -1023,8 +1028,7 @@ recBtn.addEventListener('click', async () => {
   if (rendering) { cancelRender = true; return; }
   if (rec) { stopRecording(); return; }
   const [w, h] = REC_SIZES[recShape.value];
-  const codec = await pickVideoCodec(w, h);
-  if (codec) renderOffline(codec);
+  if (await canRenderOffline(w, h)) renderOffline();
   else startRecording();   // no WebCodecs: record in real time instead
 });
 

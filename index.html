@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>For your oscilloscope</title>
+<title>The Retrospects, Private Lives, DJ Luke, Henry Arlingtons. Ottawa, Fri Nov 6</title>
 <meta name="description" content="A message paged out on an oscilloscope. Every line is a sound.">
-<meta property="og:title" content="For your oscilloscope">
+<meta property="og:title" content="The Retrospects, Private Lives, DJ Luke, Henry Arlingtons. Ottawa, Fri Nov 6">
 <meta property="og:description" content="A message paged out on an oscilloscope: every line is a sound, and the words turn into a cube between them.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#060b08">
@@ -15,7 +15,7 @@
 <body>
 
 <div id="open-overlay">
-  <h1 id="show-title">For your oscilloscope</h1>
+  <h1 id="show-title">The Retrospects, Private Lives, DJ Luke, Henry Arlingtons. Ottawa, Fri Nov 6</h1>
   <p class="blurb">
     Every line you are about to see is a sound. Two of them, actually: one
     steering left and right, one steering up and down. Feed them to a scope in
@@ -66,6 +66,10 @@
 
 <main id="stage" hidden>
   <canvas id="scope"></canvas>
+  <div id="render-bar" hidden>
+    <div class="track"><div id="render-fill"></div><span id="render-text">Rendering 0%</span></div>
+    <button id="render-stop" type="button">Stop</button>
+  </div>
   <div id="mono-warn" hidden>
     <b>Your phone is sending mono.</b> Both axes are getting the same signal, so
     a scope will draw one diagonal line instead of a picture. Turn the mic off
@@ -128,7 +132,7 @@
       </select>
     </label>
     <label class="msg">Event name (tab and opening screen)
-      <input type="text" id="title-input" maxlength="90" placeholder="For your oscilloscope" spellcheck="false">
+      <input type="text" id="title-input" maxlength="90" placeholder="The Retrospects, Private Lives, DJ Luke, Henry Arlingtons. Ottawa, Fri Nov 6" spellcheck="false">
     </label>
     <label class="msg">Message, one line per page. A line with just * puts a spiral there (or * triangle, * square, * circle, * sun, * wave, * mirrorball, * henry, * retrospects, * cube, * pyramid)
       <textarea id="msg-input" rows="6" spellcheck="false"></textarea>
