@@ -19,7 +19,7 @@
 // lissajous-core.js / hershey.js / mic-react.js / scope-worklet.js /
 // wireframe.js / pages.js are copies owned by ../phone — see sync-shared.sh.
 
-import { synthesizeShapeXY, resampleStrokes, lerpShapes } from './lissajous-core.js';
+import { synthesizeShapeXY, resampleStrokes, lerpShapes, PARAM_KEYS } from './lissajous-core.js';
 import { textToStrokes } from './hershey.js';
 import { wireframeStrokes } from './wireframe.js';
 import { spiralStrokes, SPIRALS, DRAW_SECONDS } from './spirals.js';
@@ -591,14 +591,17 @@ function drawTable(c, table, p, w, cy, r) {
   c.stroke(path);
 }
 
-function frame(now) {
-  const dt = Math.min((now - lastFrame) / 1000, 0.05);
-  lastFrame = now;
+// step: advance the show by dt and work out what is on the tube. Shared by the
+// live loop and the offline video render, which calls it on a fixed clock
+// without a screen (now = null skips the mic, which a render must not hear).
+function step(dt, now) {
   simT += dt;
   motionT += dt * state.bpm / MOTION_REF_BPM;
 
-  mic.poll(now);
-  if (state.reactive && mic.bpm) state.bpm = Math.min(240, Math.max(30, mic.bpm));
+  if (now != null) {
+    mic.poll(now);
+    if (state.reactive && mic.bpm) state.bpm = Math.min(240, Math.max(30, mic.bpm));
+  }
   if (!state.reactive && simT - state.lastBeatAt >= 60 / state.bpm) state.lastBeatAt = simT;
 
   advance();
@@ -613,29 +616,52 @@ function frame(now) {
   const p = params();
   const still = currentTable();
   const table = mv.dx || mv.dy || mv.scale !== 1 ? moveTable(still, mv, moved) : still;
-  // A morph, or a page that is a turning solid, changes the table every frame;
-  // a text page holding still does not.
-  // Every page is in motion now, so the table always counts as live.
-  pushTable(table, true);
-  if (toneOn || rec) workletNode?.port.postMessage({ type: 'params', value: p });
-
-  const { w, h, cy, r } = geometry();
-  ctx.fillStyle = '#030f09';
-  ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = '#6cffb3';
-  ctx.shadowColor = '#6cffb3';
   // Transitions draw in the thinnest line: it thins almost at once when a
   // page starts to go, and widens back over the first moment of the next
   // page. Same shapes, finer trace, which is far easier on the eyes than a
   // full-weight burst.
   const into = phase === 'morph' ? Math.min(1, mix / 0.12) : Math.max(0, 1 - (simT - phaseStart) / 0.3);
   const thin = into * into * (3 - 2 * into);
-  ctx.lineWidth = 1.6 - 1.0 * thin;
-  ctx.shadowBlur = 8 - 6 * thin;
-  ctx.globalAlpha = mv.alpha;
-  drawTable(ctx, table, p, w, cy, r);
-  ctx.globalAlpha = 1;
-  if (rec && !rec.stopping) recordFrame(table, p, mv, thin);
+  return { table, p, mv, thin };
+}
+
+// paintTo: one frame of the tube on any canvas. Line weight and glow scale
+// with the picture (k = 1 on the phone screen), so a 1080-wide video looks
+// like the phone does.
+function paintTo(c, w, h, cy, r, k, f) {
+  c.globalAlpha = 1;
+  c.shadowBlur = 0;
+  c.fillStyle = '#030f09';
+  c.fillRect(0, 0, w, h);
+  c.lineJoin = 'round';
+  c.lineCap = 'round';
+  c.strokeStyle = '#6cffb3';
+  c.shadowColor = '#6cffb3';
+  c.lineWidth = (1.6 - 1.0 * f.thin) * k;
+  c.shadowBlur = (8 - 6 * f.thin) * k;
+  c.globalAlpha = f.mv.alpha;
+  drawTable(c, f.table, f.p, w, cy, r);
+  c.globalAlpha = 1;
+}
+
+let rendering = false;   // an offline render owns the show clock while true
+
+function frame(now) {
+  if (rendering) {
+    lastFrame = now;
+    requestAnimationFrame(frame);
+    return;
+  }
+  const dt = Math.min((now - lastFrame) / 1000, 0.05);
+  lastFrame = now;
+  const f = step(dt, now);
+  // Every page is in motion now, so the table always counts as live.
+  pushTable(f.table, true);
+  if (toneOn || rec) workletNode?.port.postMessage({ type: 'params', value: f.p });
+
+  const { w, h, cy, r } = geometry();
+  paintTo(ctx, w, h, cy, r, 1, f);
+  if (rec && !rec.stopping) recordFrame(f);
 
   requestAnimationFrame(frame);
 }
@@ -688,6 +714,7 @@ const videoPanel = document.getElementById('video');
 const videoBtn = document.getElementById('video-btn');
 const recShape = document.getElementById('rec-shape');
 const recMute = document.getElementById('rec-mute');
+const recLoops = document.getElementById('rec-loops');
 const recBtn = document.getElementById('rec-btn');
 const saveBtn = document.getElementById('save-btn');
 const recStatus = document.getElementById('rec-status');
@@ -697,6 +724,11 @@ let recName = '';
 let recDest = null;
 
 const loopSeconds = () => pages.reduce((sum, page) => sum + page.hold + tuning.morph, 0);
+const recSeconds = () => loopSeconds() * Number(recLoops.value);
+const recLabel = (again) => {
+  const n = Number(recLoops.value);
+  return `Render${again ? ' again' : ''}: ${n} loop${n === 1 ? '' : 's'} (${Math.ceil(recSeconds())}s)`;
+};
 
 function showVideo(on) {
   videoPanel.hidden = !on;
@@ -705,7 +737,7 @@ function showVideo(on) {
     showTune(false);
     about.hidden = true;
     aboutBtn.classList.remove('active');
-    if (!rec) recBtn.textContent = `Record one loop (${Math.ceil(loopSeconds())}s)`;
+    if (!rec) recBtn.textContent = recLabel(false);
   }
 }
 videoBtn.addEventListener('click', () => showVideo(videoPanel.hidden));
@@ -771,7 +803,7 @@ async function startRecording() {
     const mb = (recBlob.size / 1e6).toFixed(1);
     recStatus.textContent = `Done: ${mb} MB${audio ? '' : ', no audio'}. Save it, or record again.`;
     rec = null;
-    recBtn.textContent = `Record again (${Math.ceil(loopSeconds())}s)`;
+    recBtn.textContent = recLabel(true);
     recBtn.classList.remove('recording');
     saveBtn.hidden = false;
   };
@@ -781,7 +813,7 @@ async function startRecording() {
   mix = 0;
   phase = 'hold';
   phaseStart = simT;
-  rec = { recorder, c, w, h, start: simT, dur: loopSeconds() + 0.3, shown: -1, stopping: false };
+  rec = { recorder, c, w, h, start: simT, dur: recSeconds() + 0.3, shown: -1, stopping: false };
   recBlob = null;
   saveBtn.hidden = true;
   recBtn.textContent = 'Stop';
@@ -796,25 +828,11 @@ function stopRecording() {
   rec.recorder.stop();
 }
 
-// recordFrame: the screen's frame, redrawn at the video's size. Line weight
-// and glow scale with the picture so a 1080-wide video looks like the phone.
-function recordFrame(table, p, mv, thin) {
+// recordFrame: the real-time fallback's frame, redrawn at the video's size.
+function recordFrame(f) {
   const { c, w, h } = rec;
   const r = Math.min(w, h) * 0.42;
-  const k = r / 160;
-  c.globalAlpha = 1;
-  c.shadowBlur = 0;
-  c.fillStyle = '#030f09';
-  c.fillRect(0, 0, w, h);
-  c.lineJoin = 'round';
-  c.lineCap = 'round';
-  c.strokeStyle = '#6cffb3';
-  c.shadowColor = '#6cffb3';
-  c.lineWidth = (1.6 - 1.0 * thin) * k;
-  c.shadowBlur = (8 - 6 * thin) * k;
-  c.globalAlpha = mv.alpha;
-  drawTable(c, table, p, w, h / 2, r);
-  c.globalAlpha = 1;
+  paintTo(c, w, h, h / 2, r, r / 160, f);
 
   const elapsed = simT - rec.start;
   const sec = Math.floor(elapsed);
@@ -825,9 +843,189 @@ function recordFrame(table, p, mv, thin) {
   if (elapsed >= rec.dur) stopRecording();
 }
 
-recBtn.addEventListener('click', () => {
-  if (rec) stopRecording();
-  else startRecording();
+// --- Offline render --------------------------------------------------------
+//
+// Faster than real time: the show is stepped on a fixed 1/30 s clock as fast
+// as the device can go, each frame is encoded with the browser's own H.264
+// encoder (WebCodecs), the scope signal is synthesized offline by the same
+// math the worklet runs, and mp4-muxer (vendored, MIT) packs the two into an
+// MP4. Browsers without WebCodecs fall back to the real-time recorder above.
+
+const FPS = 30;
+const AUDIO_RATE = 48000;
+let cancelRender = false;
+
+async function pickVideoCodec(w, h) {
+  if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined') return null;
+  for (const codec of ['avc1.640028', 'avc1.4d0028', 'avc1.42e028']) {
+    try {
+      const r = await VideoEncoder.isConfigSupported({ codec, width: w, height: h, bitrate: 8e6, framerate: FPS, avc: { format: 'avc' } });
+      if (r.supported) return codec;
+    } catch { /* try the next profile */ }
+  }
+  return null;
+}
+
+async function audioEncodable() {
+  if (typeof AudioEncoder === 'undefined' || typeof AudioData === 'undefined') return false;
+  try {
+    const r = await AudioEncoder.isConfigSupported({ codec: 'mp4a.40.2', sampleRate: AUDIO_RATE, numberOfChannels: 2, bitrate: 128000 });
+    return !!r.supported;
+  } catch { return false; }
+}
+
+// OfflineSynth: scope-worklet.js's process loop, minus the AudioWorklet:
+// tables swap only at a lap boundary, params ease per 128-sample block.
+// Output is scaled by the 0.5 the live path's gain stage applies.
+class OfflineSynth {
+  constructor() {
+    this.t = 0;
+    this.shape = null;
+    this.pending = undefined;
+    this.lap = 0;
+    this.smoothed = null;
+    this.block = 0;
+  }
+  render(table, p, n) {
+    const copy = { x: table.x.slice(), y: table.y.slice() };
+    if (!this.shape) this.shape = copy;
+    else this.pending = copy;
+    if (!this.smoothed) this.smoothed = { ...p };
+    const out = new Float32Array(n * 2);
+    const dt = 1 / AUDIO_RATE;
+    for (let i = 0; i < n; i++) {
+      if (this.block++ % 128 === 0) {
+        for (const key of PARAM_KEYS) {
+          if (key === 'beatTarget' || key === 'storyMix') this.smoothed[key] = p[key];
+          else this.smoothed[key] += (p[key] - this.smoothed[key]) * 0.2;
+        }
+      }
+      const lap = Math.floor(this.t * this.smoothed.traceFreqHz);
+      if (lap !== this.lap && this.pending !== undefined) {
+        this.shape = this.pending;
+        this.pending = undefined;
+      }
+      this.lap = lap;
+      const [x, y] = synthesizeShapeXY(this.t, this.shape, this.smoothed, this.t);
+      out[i] = x * 0.5;
+      out[n + i] = y * 0.5;
+      this.t += dt;
+    }
+    return out;
+  }
+}
+
+async function renderOffline(codec) {
+  const withAudio = !recMute.checked && await audioEncodable();
+  const [w, h] = REC_SIZES[recShape.value];
+  const { Muxer, ArrayBufferTarget } = await import('./vendor/mp4-muxer.mjs');
+  const muxer = new Muxer({
+    target: new ArrayBufferTarget(),
+    video: { codec: 'avc', width: w, height: h, frameRate: FPS },
+    ...(withAudio ? { audio: { codec: 'aac', numberOfChannels: 2, sampleRate: AUDIO_RATE } } : {}),
+    fastStart: 'in-memory',
+    firstTimestampBehavior: 'offset',
+  });
+  let failure = null;
+  const venc = new VideoEncoder({
+    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+    error: (e) => { failure = e; },
+  });
+  venc.configure({ codec, width: w, height: h, bitrate: 8e6, framerate: FPS, avc: { format: 'avc' } });
+  let aenc = null;
+  if (withAudio) {
+    aenc = new AudioEncoder({
+      output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+      error: (e) => { failure = e; },
+    });
+    aenc.configure({ codec: 'mp4a.40.2', sampleRate: AUDIO_RATE, numberOfChannels: 2, bitrate: 128000 });
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const c = canvas.getContext('2d');
+  const r = Math.min(w, h) * 0.42;
+
+  // Take the show clock, start it from the top, and give it back afterwards.
+  const saved = { simT, motionT, pageIndex, mix, phase, phaseStart, lastBeatAt: state.lastBeatAt };
+  rendering = true;
+  cancelRender = false;
+  simT = 0; motionT = 0; pageIndex = 0; mix = 0; phase = 'hold'; phaseStart = 0;
+  state.lastBeatAt = -10;
+  tableCache.clear();
+
+  recBlob = null;
+  saveBtn.hidden = true;
+  recBtn.textContent = 'Stop';
+  recBtn.classList.add('recording');
+  const total = Math.round(recSeconds() * FPS);
+  const perFrame = AUDIO_RATE / FPS;
+  const synth = new OfflineSynth();
+  const t0 = performance.now();
+  let done = 0;
+  try {
+    for (let i = 0; i < total; i++) {
+      if (cancelRender || failure) break;
+      const f = step(1 / FPS, null);
+      paintTo(c, w, h, h / 2, r, r / 160, f);
+      const timestamp = Math.round(i * 1e6 / FPS);
+      const vf = new VideoFrame(canvas, { timestamp, duration: Math.round(1e6 / FPS) });
+      venc.encode(vf, { keyFrame: i % (FPS * 2) === 0 });
+      vf.close();
+      if (aenc) {
+        const data = synth.render(f.table, f.p, perFrame);
+        const ad = new AudioData({ format: 'f32-planar', sampleRate: AUDIO_RATE, numberOfFrames: perFrame, numberOfChannels: 2, timestamp, data });
+        aenc.encode(ad);
+        ad.close();
+      }
+      done = i + 1;
+      while (venc.encodeQueueSize > 6) await new Promise(res => setTimeout(res, 2));
+      if (i % 15 === 0) {
+        recStatus.textContent = `Rendering ${Math.round(100 * done / total)}%...`;
+        await new Promise(res => setTimeout(res, 0));
+      }
+    }
+    if (!failure) {
+      await venc.flush();
+      if (aenc) await aenc.flush();
+    }
+  } catch (e) {
+    failure = failure || e;
+  } finally {
+    try { venc.close(); } catch { /* already closed */ }
+    try { aenc?.close(); } catch { /* already closed */ }
+    ({ simT, motionT, pageIndex, mix, phase, phaseStart } = saved);
+    state.lastBeatAt = saved.lastBeatAt;
+    tableCache.clear();
+    rendering = false;
+    recBtn.classList.remove('recording');
+    recBtn.textContent = recLabel(false);
+  }
+
+  if (failure || cancelRender) {
+    recStatus.textContent = failure ? `Render failed: ${failure.message || failure}` : 'Stopped.';
+    return;
+  }
+  muxer.finalize();
+  recBlob = new Blob([muxer.target.buffer], { type: 'video/mp4' });
+  recName = `scope-show-${recShape.value}-${recLoops.value}x.mp4`;
+  const secs = ((performance.now() - t0) / 1000).toFixed(1);
+  const mb = (recBlob.size / 1e6).toFixed(1);
+  recStatus.textContent = `Done: ${(done / FPS).toFixed(0)}s of video in ${secs}s, ${mb} MB${withAudio ? '' : ', no audio'}.`;
+  recBtn.textContent = recLabel(true);
+  saveBtn.hidden = false;
+}
+
+recLoops.addEventListener('change', () => { if (!rec) recBtn.textContent = recLabel(!!recBlob); });
+
+recBtn.addEventListener('click', async () => {
+  if (rendering) { cancelRender = true; return; }
+  if (rec) { stopRecording(); return; }
+  const [w, h] = REC_SIZES[recShape.value];
+  const codec = await pickVideoCodec(w, h);
+  if (codec) renderOffline(codec);
+  else startRecording();   // no WebCodecs: record in real time instead
 });
 
 saveBtn.addEventListener('click', async () => {

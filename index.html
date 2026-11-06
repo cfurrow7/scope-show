@@ -145,13 +145,20 @@
         <option value="landscape">Landscape 16:9</option>
       </select>
     </label>
+    <label>Loops
+      <select id="rec-loops">
+        <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+        <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+        <option value="8">8</option><option value="10">10</option>
+      </select>
+    </label>
     <label class="check"><input type="checkbox" id="rec-mute"> No audio</label>
     <div class="rec-actions">
-      <button id="rec-btn" class="panel-btn" type="button">Record one loop</button>
+      <button id="rec-btn" class="panel-btn" type="button">Render</button>
       <button id="save-btn" class="panel-btn" type="button" hidden>Save video</button>
     </div>
-    <p id="rec-status" class="tune-note">Plays the show from the top and records
-      one full loop, right here on this device. Nothing is uploaded.</p>
+    <p id="rec-status" class="tune-note">Renders the show from the top, faster
+      than real time, right here on this device. Nothing is uploaded.</p>
   </div>
   <div id="about" hidden>
     <p><b>Hear it</b> plays the actual signal that draws the shape. It is a raw
