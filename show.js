@@ -23,7 +23,7 @@ import { synthesizeShapeXY, resampleStrokes, lerpShapes, PARAM_KEYS } from './li
 import { textToStrokes } from './hershey.js';
 import { wireframeStrokes } from './wireframe.js';
 import { spiralStrokes, SPIRALS, DRAW_SECONDS } from './spirals.js';
-import { writeOn, tilt, squash, easeOut, clip, staticBurst, warpBlend } from './vector-fx.js';
+import { writeOn, tilt, squash, easeOut, clip as cutEdge, pin, staticBurst, warpBlend } from './vector-fx.js';
 import { HENRY } from './henry.js';
 import { RETRO_LOGO } from './retrospects.js';
 import { sunsetStrokes } from './sunset.js';
@@ -121,6 +121,9 @@ function baseText(text) {
   if (!textStrokeCache.has(text)) textStrokeCache.set(text, textToStrokes(text, { align: 'center' }));
   return textStrokeCache.get(text);
 }
+
+// The tube's edge: cut off whatever flies past it, or pin it to the border.
+const clip = (strokes) => (tuning.edge === 'hug' ? pin(strokes) : cutEdge(strokes));
 
 const tempoRate = () => state.bpm / MOTION_REF_BPM;
 
@@ -1221,6 +1224,13 @@ if (rateSelect.value !== String(tuning.rate)) {
 }
 rateSelect.addEventListener('change', () => {
   tuning.rate = clampTiming('rate', rateSelect.value);
+  writeUrl();
+});
+
+const edgeSelect = document.getElementById('edge-style');
+edgeSelect.value = tuning.edge;
+edgeSelect.addEventListener('change', () => {
+  tuning.edge = edgeSelect.value;
   writeUrl();
 });
 

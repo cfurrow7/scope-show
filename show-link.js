@@ -35,6 +35,10 @@ export const DEFAULT_TITLE = 'The Retrospects, Private Lives, DJ Luke, Henry Arl
 // it through a vortex into the next.
 export const FX = ['morph', 'static', 'warp'];
 
+// What happens past the tube's edge: 'cut' removes it, 'hug' pins it to the
+// nearest border so it slides along the edge.
+export const EDGES = ['cut', 'hug'];
+
 const KEYS = { hold: 'h', solidHold: 's', morph: 'x', bpm: 'b', rate: 'r' };
 
 export function clampTiming(key, value) {
@@ -58,6 +62,7 @@ export function parseShowLink(hash, fallbackMessage = '') {
   };
   const n = (params.get('n') ?? '').trim();
   state.title = n ? n.slice(0, MAX_TITLE) : '';
+  state.edge = EDGES.includes(params.get('k')) ? params.get('k') : 'cut';
   state.fx = FX.includes(params.get('e')) ? params.get('e') : 'morph';
   state.move = MOVES.includes(params.get('m')) ? params.get('m') : MOVE_DEFAULT;
   const i = Number(params.get('i'));
@@ -85,6 +90,7 @@ export function buildShowLink(state) {
     params.set(KEYS.rate, Math.round(clampTiming('rate', state.rate)));
   }
   if (state.title?.trim()) params.set('n', state.title.trim().slice(0, MAX_TITLE));
+  if (state.edge === 'hug') params.set('k', 'hug');
   if (state.fx && state.fx !== 'morph' && FX.includes(state.fx)) params.set('e', state.fx);
   if (state.move && MOVES.includes(state.move)) params.set('m', state.move);
   if (Number.isFinite(state.intensity)) params.set('i', String(Math.round(state.intensity)));

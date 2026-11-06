@@ -107,6 +107,15 @@ export function clip(strokes, lim = 0.96) {
   return out;
 }
 
+// pin: the other way to handle the tube's edge. Every point past |x|, |y| <=
+// lim is moved to the nearest point on the border, so whatever flies off the
+// screen slides along the edge instead of disappearing. The border lines come
+// out bright where a lot of the shape piles onto them, which is the look.
+export function pin(strokes, lim = 0.96) {
+  const c = v => Math.max(-lim, Math.min(lim, v));
+  return strokes.map(s => s.map(p => (Math.abs(p.x) <= lim && Math.abs(p.y) <= lim ? p : { x: c(p.x), y: c(p.y) })));
+}
+
 // Liang-Barsky. Returns the visible part of segment a-b, reusing the original
 // endpoint objects where they survive so the caller can tell a cut from a
 // continuation.
