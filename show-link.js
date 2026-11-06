@@ -25,6 +25,10 @@ export const SHOW_LIMITS = { hold: [1, 10], solidHold: [1, 10], morph: [0.2, 3],
 import { MOVES, MOVE_DEFAULT, INTENSITY_DEFAULT } from './movement.js';
 
 export const MAX_MESSAGE = 600;
+// The event's name: browser tab and opening heading. Optional; without it the
+// page keeps its generic title.
+export const MAX_TITLE = 90;
+export const DEFAULT_TITLE = 'For your oscilloscope';
 
 // Transition styles: 'morph' point-lerps page into page; 'static' blows the
 // outgoing page apart into fuzz before the next one draws on; 'warp' swirls
@@ -52,6 +56,8 @@ export function parseShowLink(hash, fallbackMessage = '') {
     message: custom ? t : fallbackMessage,
     custom,
   };
+  const n = (params.get('n') ?? '').trim();
+  state.title = n ? n.slice(0, MAX_TITLE) : '';
   state.fx = FX.includes(params.get('e')) ? params.get('e') : 'morph';
   state.move = MOVES.includes(params.get('m')) ? params.get('m') : MOVE_DEFAULT;
   const i = Number(params.get('i'));
@@ -78,6 +84,7 @@ export function buildShowLink(state) {
   if (state.rate != null && Math.round(state.rate) !== SHOW_DEFAULTS.rate) {
     params.set(KEYS.rate, Math.round(clampTiming('rate', state.rate)));
   }
+  if (state.title?.trim()) params.set('n', state.title.trim().slice(0, MAX_TITLE));
   if (state.fx && state.fx !== 'morph' && FX.includes(state.fx)) params.set('e', state.fx);
   if (state.move && MOVES.includes(state.move)) params.set('m', state.move);
   if (Number.isFinite(state.intensity)) params.set('i', String(Math.round(state.intensity)));

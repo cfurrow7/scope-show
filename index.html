@@ -15,7 +15,7 @@
 <body>
 
 <div id="open-overlay">
-  <h1>For your oscilloscope</h1>
+  <h1 id="show-title">For your oscilloscope</h1>
   <p class="blurb">
     Every line you are about to see is a sound. Two of them, actually: one
     steering left and right, one steering up and down. Feed them to a scope in
@@ -126,6 +126,9 @@
         <option value="album">Album art</option>
         <option value="text">Plain text</option>
       </select>
+    </label>
+    <label class="msg">Event name (tab and opening screen)
+      <input type="text" id="title-input" maxlength="90" placeholder="For your oscilloscope" spellcheck="false">
     </label>
     <label class="msg">Message, one line per page. A line with just * puts a spiral there (or * triangle, * square, * circle, * sun, * wave, * mirrorball, * henry, * retrospects, * cube, * pyramid)
       <textarea id="msg-input" rows="6" spellcheck="false"></textarea>

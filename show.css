@@ -220,14 +220,14 @@ ol.scope b { color: #6cffb3; font-weight: 500; }
 }
 :is(#tune, #video) select:focus { outline: none; border-color: #6cffb3; }
 
-:is(#tune, #video) textarea {
-  width: 100%; resize: vertical;
+:is(#tune, #video) textarea, #title-input {
+  width: 100%; resize: vertical; box-sizing: border-box; font-size: 16px;
   padding: 10px 12px; border-radius: 6px;
   border: 1px solid #3d4a42; background: rgba(3, 15, 9, 0.9); color: #ece6da;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px; line-height: 1.5; letter-spacing: 0.02em; text-transform: none;
 }
-:is(#tune, #video) textarea:focus { outline: none; border-color: #6cffb3; }
+:is(#tune, #video) textarea:focus, #title-input:focus { outline: none; border-color: #6cffb3; }
 
 #copy-btn, .panel-btn {
   align-self: flex-start;

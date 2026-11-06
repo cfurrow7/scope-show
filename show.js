@@ -31,7 +31,7 @@ import { mirrorBallStrokes } from './mirrorball.js';
 import { waveStrokes } from './wave.js';
 import { movement, moveTable } from './movement.js';
 import { paginate, unsupportedChars, retroStyle, setRetroStyle } from './pages.js';
-import { parseShowLink, buildShowLink, clampTiming, tapTempo, MAX_MESSAGE } from './show-link.js';
+import { parseShowLink, buildShowLink, clampTiming, tapTempo, MAX_MESSAGE, MAX_TITLE, DEFAULT_TITLE } from './show-link.js';
 import { createMicReactor } from './mic-react.js';
 
 // --- The message -------------------------------------------------------------
@@ -1049,6 +1049,22 @@ saveBtn.addEventListener('click', async () => {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 60000);
 });
+
+// --- Event name --------------------------------------------------------------
+const titleEl = document.getElementById('show-title');
+const titleInput = document.getElementById('title-input');
+function applyTitle() {
+  const name = tuning.title || DEFAULT_TITLE;
+  document.title = name;
+  titleEl.textContent = name;
+}
+titleInput.value = tuning.title;
+titleInput.addEventListener('input', () => {
+  tuning.title = titleInput.value.slice(0, MAX_TITLE);
+  applyTitle();
+});
+titleInput.addEventListener('change', writeUrl);
+applyTitle();
 
 // --- Timing panel ------------------------------------------------------------
 //
