@@ -361,8 +361,44 @@ function pushTable(table, live) {
   lastPostedAt = simT;
 }
 
+// iOS plays Web Audio as "ambient" sound, which the ring/silent switch mutes:
+// on a phone set to silent, Hear it did nothing at all. Asking for "playback"
+// (iOS 17+) makes it behave like a music app. Older iOS needs the old trick:
+// a looping silent <audio> element started in the same tap, which flips the
+// whole page's audio session to playback. Both have to happen inside the tap.
+let unlockEl = null;
+function silentWavUrl() {
+  const rate = 8000, n = 800;
+  const buf = new ArrayBuffer(44 + n * 2);
+  const v = new DataView(buf);
+  const str = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVEfmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  str(36, 'data'); v.setUint32(40, n * 2, true);
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+}
+function unlockIosAudio() {
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* not iOS */ }
+  if (!unlockEl) {
+    unlockEl = document.createElement('audio');
+    unlockEl.src = silentWavUrl();
+    unlockEl.loop = true;
+    unlockEl.setAttribute('playsinline', '');
+    unlockEl.setAttribute('x-webkit-airplay', 'deny');
+  }
+  unlockEl.play().catch(() => {});
+}
+
+// The opening tap builds the audio graph; a Hear it tap that lands while that
+// is still loading has to wait for it rather than poke a half-built graph.
+let building = null;
 async function startTone() {
-  if (!audioCtx) {
+  unlockIosAudio();
+  if (audioCtx && audioCtx.state !== 'running') audioCtx.resume().catch(() => {});
+  if (building) await building;
+  if (!audioCtx) building = (async () => {
     audioCtx = new AudioContext({ sampleRate: 48000 });
     await audioCtx.audioWorklet.addModule('scope-worklet.js');
     workletNode = new AudioWorkletNode(audioCtx, 'scope-synth', { outputChannelCount: [2] });
@@ -382,7 +418,8 @@ async function startTone() {
       }
     };
     lastPosted = null;
-  }
+  })();
+  if (building) { await building; building = null; }
   if (audioCtx.state !== 'running') await audioCtx.resume();
   toneOn = true;
   // Short ramp instead of a hard gate: a raw XY signal switched on at full
