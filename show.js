@@ -728,9 +728,11 @@ let recDest = null;
 
 const loopSeconds = () => pages.reduce((sum, page) => sum + page.hold + tuning.morph, 0);
 const recSeconds = () => loopSeconds() * Number(recLoops.value);
+const onPhone = () => matchMedia('(pointer: coarse)').matches;
 const recLabel = (again) => {
   const n = Number(recLoops.value);
-  return `Render${again ? ' again' : ''}: ${n} loop${n === 1 ? '' : 's'} (${Math.ceil(recSeconds())}s)`;
+  const what = onPhone() ? 'Export video to Camera Roll' : 'Export video';
+  return `${what}: ${n} loop${n === 1 ? '' : 's'} (${Math.ceil(recSeconds())}s)`;
 };
 
 function showVideo(on) {
@@ -1023,6 +1025,10 @@ async function renderOffline() {
   recStatus.textContent = `Done: ${(done / FPS).toFixed(0)}s of video in ${secs}s, ${mb2} MB${sound}.`;
   recBtn.textContent = recLabel(true);
   saveBtn.hidden = false;
+  // Go straight to the share sheet ("Save Video" puts it in Photos). Safari
+  // may refuse because the tap that started the render is too old; then the
+  // Save button does it with a fresh tap.
+  if (onPhone()) saveVideo(true);
 }
 
 recLoops.addEventListener('change', () => { if (!rec) recBtn.textContent = recLabel(!!recBlob); });
@@ -1035,19 +1041,20 @@ recBtn.addEventListener('click', async () => {
   else startRecording();   // no WebCodecs: record in real time instead
 });
 
-saveBtn.addEventListener('click', async () => {
+async function saveVideo(auto = false) {
   if (!recBlob) return;
   const file = new File([recBlob], recName, { type: recBlob.type });
   // On a phone the share sheet is the way into Photos ("Save Video"); on a
   // desktop a plain download is what people expect.
-  if (matchMedia('(pointer: coarse)').matches && navigator.canShare?.({ files: [file] })) {
+  if (onPhone() && navigator.canShare?.({ files: [file] })) {
     try {
       await navigator.share({ files: [file] });
       return;
     } catch (e) {
-      if (e.name === 'AbortError') return;
+      if (e.name === 'AbortError' || auto) return;
     }
   }
+  if (auto) return;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(recBlob);
   a.download = recName;
@@ -1055,7 +1062,9 @@ saveBtn.addEventListener('click', async () => {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-});
+}
+saveBtn.addEventListener('click', () => saveVideo());
+if (!onPhone()) saveBtn.textContent = 'Download video';
 
 // --- Event name --------------------------------------------------------------
 const titleEl = document.getElementById('show-title');
