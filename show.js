@@ -1227,10 +1227,10 @@ rateSelect.addEventListener('change', () => {
   writeUrl();
 });
 
-const edgeSelect = document.getElementById('edge-style');
-edgeSelect.value = tuning.edge;
-edgeSelect.addEventListener('change', () => {
-  tuning.edge = edgeSelect.value;
+const edgeHug = document.getElementById('edge-hug');
+edgeHug.checked = tuning.edge === 'hug';
+edgeHug.addEventListener('change', () => {
+  tuning.edge = edgeHug.checked ? 'hug' : 'cut';
   writeUrl();
 });
 

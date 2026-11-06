@@ -188,7 +188,7 @@ ol.scope b { color: #6cffb3; font-weight: 500; }
   width: 20px; height: 20px; border: none; border-radius: 50%; background: #6cffb3;
 }
 
-:is(#tune, #video) label#retro-row, :is(#tune, #video) label#fx-row, :is(#tune, #video) label#move-row, #tune label#edge-row, #tune label#rate-row { grid-template-columns: 8.5em 1fr; }
+:is(#tune, #video) label#retro-row, :is(#tune, #video) label#fx-row, :is(#tune, #video) label#move-row, #tune label#rate-row { grid-template-columns: 8.5em 1fr; }
 :is(#tune, #video) label[hidden] { display: none; }
 #tempo-row {
   display: grid; grid-template-columns: 8.5em 1fr 7.5em; align-items: center; gap: 10px;
@@ -244,7 +244,8 @@ ol.scope b { color: #6cffb3; font-weight: 500; }
 
 /* --- Video panel --------------------------------------------------------- */
 #video label { grid-template-columns: 8.5em 1fr; }
-#video label.check { display: flex; gap: 10px; align-items: center; }
+#video label.check, #tune label.check { display: flex; gap: 10px; align-items: center; text-transform: none; letter-spacing: 0.02em; }
+#tune input[type="checkbox"] { width: 18px; height: 18px; accent-color: #6cffb3; margin: 0; flex: 0 0 auto; }
 #video input[type="checkbox"] { width: 18px; height: 18px; accent-color: #6cffb3; margin: 0; }
 .rec-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .panel-btn.recording { border-color: #ff8a5c; color: #ff8a5c; }

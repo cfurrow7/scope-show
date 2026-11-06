@@ -107,13 +107,42 @@ export function clip(strokes, lim = 0.96) {
   return out;
 }
 
-// pin: the other way to handle the tube's edge. Every point past |x|, |y| <=
-// lim is moved to the nearest point on the border, so whatever flies off the
-// screen slides along the edge instead of disappearing. The border lines come
-// out bright where a lot of the shape piles onto them, which is the look.
+// pin: the other way to handle the tube's edge. A point past |x|, |y| <= lim
+// is put on the border, then slid ALONG it by as far as it overshot, away from
+// the middle of that edge: on the right edge the part above centre runs up and
+// the part below runs down, so overflow splits and spreads in opposite
+// directions instead of stacking in one spot. A slide that reaches a corner
+// carries on round onto the next edge.
 export function pin(strokes, lim = 0.96) {
-  const c = v => Math.max(-lim, Math.min(lim, v));
-  return strokes.map(s => s.map(p => (Math.abs(p.x) <= lim && Math.abs(p.y) <= lim ? p : { x: c(p.x), y: c(p.y) })));
+  const L = lim, P = 8 * L;
+  const clampL = v => Math.max(-L, Math.min(L, v));
+  // Perimeter position s, counterclockwise: right edge going up from the
+  // bottom-right corner, then top going left, left going down, bottom going right.
+  const toPoint = (u) => {
+    const t = ((u % P) + P) % P;
+    if (t < 2 * L) return { x: L, y: -L + t };
+    if (t < 4 * L) return { x: L - (t - 2 * L), y: L };
+    if (t < 6 * L) return { x: -L, y: L - (t - 4 * L) };
+    return { x: -L + (t - 6 * L), y: -L };
+  };
+  const move = (p) => {
+    const ox = Math.abs(p.x) - L, oy = Math.abs(p.y) - L;
+    if (ox <= 0 && oy <= 0) return p;
+    let s0, dir, d;
+    if (ox >= oy) {
+      const y = clampL(p.y);
+      d = ox;
+      if (p.x > 0) { s0 = y + L; dir = Math.sign(y); }            // right edge
+      else { s0 = 4 * L + (L - y); dir = -Math.sign(y); }         // left edge
+    } else {
+      const x = clampL(p.x);
+      d = oy;
+      if (p.y > 0) { s0 = 2 * L + (L - x); dir = -Math.sign(x); } // top edge
+      else { s0 = 6 * L + (x + L); dir = Math.sign(x); }          // bottom edge
+    }
+    return toPoint(s0 + dir * d);
+  };
+  return strokes.map(st => st.map(move));
 }
 
 // Liang-Barsky. Returns the visible part of segment a-b, reusing the original
