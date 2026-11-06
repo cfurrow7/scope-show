@@ -75,6 +75,7 @@
   <div id="bar">
     <button id="tone-btn" type="button">Hear it</button>
     <button id="listen-btn" type="button">Turn on mic</button>
+    <button id="video-btn" type="button">Video</button>
     <span class="bar-break" aria-hidden="true"></span>
     <button id="tune-btn" type="button">Timing</button>
     <a id="build-btn" href="https://lissajous-scope.netlify.app" target="_blank" rel="noopener">Build your own</a>
@@ -133,6 +134,24 @@
     <button id="copy-btn" type="button">Copy link</button>
     <p class="tune-note">The link carries whatever is set here, so send it and
       the other end sees this pacing and this message.</p>
+  </div>
+  <!-- Video: records one loop of the show on this device, from a canvas the
+       size of the chosen shape, with the scope signal as its soundtrack. -->
+  <div id="video" hidden>
+    <label>Shape
+      <select id="rec-shape">
+        <option value="portrait">Portrait 9:16</option>
+        <option value="square">Square 1:1</option>
+        <option value="landscape">Landscape 16:9</option>
+      </select>
+    </label>
+    <label class="check"><input type="checkbox" id="rec-mute"> No audio</label>
+    <div class="rec-actions">
+      <button id="rec-btn" class="panel-btn" type="button">Record one loop</button>
+      <button id="save-btn" class="panel-btn" type="button" hidden>Save video</button>
+    </div>
+    <p id="rec-status" class="tune-note">Plays the show from the top and records
+      one full loop, right here on this device. Nothing is uploaded.</p>
   </div>
   <div id="about" hidden>
     <p><b>Hear it</b> plays the actual signal that draws the shape. It is a raw

@@ -146,7 +146,7 @@ ol.scope b { color: #6cffb3; font-weight: 500; }
 
 /* --- Timing panel -------------------------------------------------------- */
 
-#tune {
+:is(#tune, #video) {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
   max-height: 72vh; overflow-y: auto; touch-action: pan-y;
   /* The bar sits on top of this panel and wraps to two rows on a phone, so the
@@ -157,46 +157,46 @@ ol.scope b { color: #6cffb3; font-weight: 500; }
   display: flex; flex-direction: column; gap: 14px;
   font-size: 13px; color: #9aa8a0;
 }
-#tune[hidden] { display: none; }
+:is(#tune, #video)[hidden] { display: none; }
 
-#tune label {
+:is(#tune, #video) label {
   display: grid; grid-template-columns: 8.5em 1fr 3.4em; align-items: center;
   gap: 10px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
   color: #cfe0d6;
 }
-#tune label.msg {
+:is(#tune, #video) label.msg {
   display: flex; flex-direction: column; gap: 8px; align-items: stretch;
 }
-#tune span { text-align: right; color: #6cffb3; font-variant-numeric: tabular-nums; }
+:is(#tune, #video) span { text-align: right; color: #6cffb3; font-variant-numeric: tabular-nums; }
 
-#tune input[type="range"] {
+:is(#tune, #video) input[type="range"] {
   -webkit-appearance: none; appearance: none;
   width: 100%; height: 26px; background: transparent; margin: 0;
 }
-#tune input[type="range"]::-webkit-slider-runnable-track {
+:is(#tune, #video) input[type="range"]::-webkit-slider-runnable-track {
   height: 3px; border-radius: 2px; background: #2b3831;
 }
-#tune input[type="range"]::-webkit-slider-thumb {
+:is(#tune, #video) input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 20px; height: 20px; margin-top: -8.5px; border-radius: 50%;
   background: #6cffb3; border: none;
 }
-#tune input[type="range"]::-moz-range-track { height: 3px; background: #2b3831; }
-#tune input[type="range"]::-moz-range-thumb {
+:is(#tune, #video) input[type="range"]::-moz-range-track { height: 3px; background: #2b3831; }
+:is(#tune, #video) input[type="range"]::-moz-range-thumb {
   width: 20px; height: 20px; border: none; border-radius: 50%; background: #6cffb3;
 }
 
-#tune label#retro-row, #tune label#fx-row, #tune label#move-row { grid-template-columns: 8.5em 1fr; }
-#tune label[hidden] { display: none; }
+:is(#tune, #video) label#retro-row, :is(#tune, #video) label#fx-row, :is(#tune, #video) label#move-row { grid-template-columns: 8.5em 1fr; }
+:is(#tune, #video) label[hidden] { display: none; }
 #tempo-row {
   display: grid; grid-template-columns: 8.5em 1fr 7.5em; align-items: center; gap: 10px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #cfe0d6;
 }
-#tune .tempo-label { text-align: left; color: #cfe0d6; }
-#tune label.bpm-box { display: flex; align-items: center; gap: 6px; white-space: nowrap; color: #6cffb3; }
+:is(#tune, #video) .tempo-label { text-align: left; color: #cfe0d6; }
+:is(#tune, #video) label.bpm-box { display: flex; align-items: center; gap: 6px; white-space: nowrap; color: #6cffb3; }
 #bpm-out {
   width: 3.6em; padding: 8px 6px; border-radius: 6px; text-align: center;
   border: 1px solid #3d4a42; background: rgba(3, 15, 9, 0.9); color: #ece6da;
@@ -212,24 +212,24 @@ ol.scope b { color: #6cffb3; font-weight: 500; }
   touch-action: manipulation; -webkit-user-select: none; user-select: none;
 }
 #tap-btn.hit { border-color: #6cffb3; background: rgba(108, 255, 179, 0.15); }
-#tune select {
+:is(#tune, #video) select {
   -webkit-appearance: none; appearance: none;
   padding: 8px 10px; border-radius: 6px;
   border: 1px solid #3d4a42; background: rgba(3, 15, 9, 0.9); color: #ece6da;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
 }
-#tune select:focus { outline: none; border-color: #6cffb3; }
+:is(#tune, #video) select:focus { outline: none; border-color: #6cffb3; }
 
-#tune textarea {
+:is(#tune, #video) textarea {
   width: 100%; resize: vertical;
   padding: 10px 12px; border-radius: 6px;
   border: 1px solid #3d4a42; background: rgba(3, 15, 9, 0.9); color: #ece6da;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 13px; line-height: 1.5; letter-spacing: 0.02em; text-transform: none;
 }
-#tune textarea:focus { outline: none; border-color: #6cffb3; }
+:is(#tune, #video) textarea:focus { outline: none; border-color: #6cffb3; }
 
-#copy-btn {
+#copy-btn, .panel-btn {
   align-self: flex-start;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em;
@@ -241,3 +241,17 @@ ol.scope b { color: #6cffb3; font-weight: 500; }
 #msg-warn { color: #ffcdb5; font-size: 12px; line-height: 1.5; }
 #msg-warn[hidden] { display: none; }
 .tune-note { font-size: 12px; line-height: 1.55; color: #6a7d72; }
+
+/* --- Video panel --------------------------------------------------------- */
+#video label { grid-template-columns: 8.5em 1fr; }
+#video label.check { display: flex; gap: 10px; align-items: center; }
+#video input[type="checkbox"] { width: 18px; height: 18px; accent-color: #6cffb3; margin: 0; }
+.rec-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.panel-btn.recording { border-color: #ff8a5c; color: #ff8a5c; }
+.panel-btn[hidden] { display: none; }
+/* The recording canvas has to stay "on screen" or some browsers stop
+   painting it into the stream, so it is parked as a speck, not hidden. */
+.rec-canvas {
+  position: fixed; left: 0; top: 0; width: 2px; height: 2px;
+  opacity: 0.01; pointer-events: none; z-index: -1;
+}

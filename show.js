@@ -394,10 +394,9 @@ function unlockIosAudio() {
 // The opening tap builds the audio graph; a Hear it tap that lands while that
 // is still loading has to wait for it rather than poke a half-built graph.
 let building = null;
-async function startTone() {
+async function ensureAudio() {
   unlockIosAudio();
   if (audioCtx && audioCtx.state !== 'running') audioCtx.resume().catch(() => {});
-  if (building) await building;
   if (!audioCtx) building = (async () => {
     audioCtx = new AudioContext({ sampleRate: 48000 });
     await audioCtx.audioWorklet.addModule('scope-worklet.js');
@@ -421,6 +420,10 @@ async function startTone() {
   })();
   if (building) { await building; building = null; }
   if (audioCtx.state !== 'running') await audioCtx.resume();
+}
+
+async function startTone() {
+  await ensureAudio();
   toneOn = true;
   // Short ramp instead of a hard gate: a raw XY signal switched on at full
   // amplitude clicks hard.
@@ -521,7 +524,7 @@ function geometry() {
   // screen. Whatever is covering the bottom right now is what the picture has
   // to sit above, or tuning the timing means tuning something you cannot see.
   let bottom = bar.getBoundingClientRect().height || 84;
-  for (const panel of [tune, about]) {
+  for (const panel of [tune, about, videoPanel]) {
     if (!panel.hidden) bottom = Math.max(bottom, panel.getBoundingClientRect().height);
   }
   const cy = (h - bottom) / 2;
@@ -552,7 +555,7 @@ function jumpThreshold(table) {
 // stroke boundaries inside it (letter to letter, edge to edge) are real beam
 // jumps on hardware and are drawn as faint streaks here so the screen shows
 // what the tube would.
-function drawTable(table, p, w, cy, r) {
+function drawTable(c, table, p, w, cy, r) {
   const path = new Path2D();
   // All the jumps go into one path and are stroked once. Stroked one by one,
   // each paid its own glow blur, and a static burst (hundreds of jumps) put
@@ -581,11 +584,11 @@ function drawTable(table, p, w, cy, r) {
     }
     prevX = x; prevY = y; prevPx = px; prevPy = py;
   }
-  ctx.save();
-  ctx.globalAlpha *= JUMP_ALPHA;
-  ctx.stroke(jumps);
-  ctx.restore();
-  ctx.stroke(path);
+  c.save();
+  c.globalAlpha *= JUMP_ALPHA;
+  c.stroke(jumps);
+  c.restore();
+  c.stroke(path);
 }
 
 function frame(now) {
@@ -614,7 +617,7 @@ function frame(now) {
   // a text page holding still does not.
   // Every page is in motion now, so the table always counts as live.
   pushTable(table, true);
-  if (toneOn) workletNode?.port.postMessage({ type: 'params', value: p });
+  if (toneOn || rec) workletNode?.port.postMessage({ type: 'params', value: p });
 
   const { w, h, cy, r } = geometry();
   ctx.fillStyle = '#030f09';
@@ -630,8 +633,9 @@ function frame(now) {
   ctx.lineWidth = 1.6 - 1.0 * thin;
   ctx.shadowBlur = 8 - 6 * thin;
   ctx.globalAlpha = mv.alpha;
-  drawTable(table, p, w, cy, r);
+  drawTable(ctx, table, p, w, cy, r);
   ctx.globalAlpha = 1;
+  if (rec && !rec.stopping) recordFrame(table, p, mv, thin);
 
   requestAnimationFrame(frame);
 }
@@ -668,7 +672,184 @@ listenBtn.addEventListener('click', () => setListening(!state.reactive));
 aboutBtn.addEventListener('click', () => {
   about.hidden = !about.hidden;
   aboutBtn.classList.toggle('active', !about.hidden);
-  if (!about.hidden) showTune(false);
+  if (!about.hidden) { showTune(false); showVideo(false); }
+});
+
+// --- Video -------------------------------------------------------------------
+//
+// Records one loop of the show on the device itself: a second canvas at the
+// chosen shape is drawn every frame alongside the screen, captured with
+// MediaRecorder, and the scope signal rides along as the soundtrack (tapped
+// off the worklet before the Hear it gain, so muting the speaker does not
+// mute the video). Real time, so a 24 s show takes 24 s to record.
+
+const REC_SIZES = { portrait: [1080, 1920], square: [1080, 1080], landscape: [1920, 1080] };
+const videoPanel = document.getElementById('video');
+const videoBtn = document.getElementById('video-btn');
+const recShape = document.getElementById('rec-shape');
+const recMute = document.getElementById('rec-mute');
+const recBtn = document.getElementById('rec-btn');
+const saveBtn = document.getElementById('save-btn');
+const recStatus = document.getElementById('rec-status');
+let rec = null;
+let recBlob = null;
+let recName = '';
+let recDest = null;
+
+const loopSeconds = () => pages.reduce((sum, page) => sum + page.hold + tuning.morph, 0);
+
+function showVideo(on) {
+  videoPanel.hidden = !on;
+  videoBtn.classList.toggle('active', on);
+  if (on) {
+    showTune(false);
+    about.hidden = true;
+    aboutBtn.classList.remove('active');
+    if (!rec) recBtn.textContent = `Record one loop (${Math.ceil(loopSeconds())}s)`;
+  }
+}
+videoBtn.addEventListener('click', () => showVideo(videoPanel.hidden));
+
+function pickMime(audio) {
+  if (typeof MediaRecorder === 'undefined') return null;
+  const options = audio
+    ? ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm']
+    : ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
+  return options.find(t => MediaRecorder.isTypeSupported?.(t)) ?? '';
+}
+
+async function startRecording() {
+  const withAudio = !recMute.checked;
+  if (pickMime(withAudio) === null) {
+    recStatus.textContent = 'This browser cannot record video.';
+    return;
+  }
+  const [w, h] = REC_SIZES[recShape.value];
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  canvas.className = 'rec-canvas';
+  document.body.append(canvas);
+  const c = canvas.getContext('2d');
+  c.fillStyle = '#030f09';
+  c.fillRect(0, 0, w, h);
+  const stream = canvas.captureStream(30);
+
+  let audio = false;
+  if (withAudio) {
+    try {
+      await ensureAudio();
+      if (!recDest) {
+        recDest = audioCtx.createMediaStreamDestination();
+        const tap = audioCtx.createGain();
+        tap.gain.value = 0.5;
+        workletNode.connect(tap);
+        tap.connect(recDest);
+      }
+      for (const track of recDest.stream.getAudioTracks()) stream.addTrack(track);
+      audio = true;
+    } catch { /* no audio on this device: record picture only */ }
+  }
+
+  const mimeType = pickMime(audio);
+  let recorder;
+  try {
+    recorder = new MediaRecorder(stream, { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: 8_000_000 });
+  } catch {
+    canvas.remove();
+    recStatus.textContent = 'This browser cannot record video.';
+    return;
+  }
+  const chunks = [];
+  recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+  recorder.onstop = () => {
+    for (const track of stream.getVideoTracks()) track.stop();
+    canvas.remove();
+    const type = recorder.mimeType || mimeType || 'video/mp4';
+    recBlob = new Blob(chunks, { type });
+    recName = `scope-show-${recShape.value}.${type.includes('webm') ? 'webm' : 'mp4'}`;
+    const mb = (recBlob.size / 1e6).toFixed(1);
+    recStatus.textContent = `Done: ${mb} MB${audio ? '' : ', no audio'}. Save it, or record again.`;
+    rec = null;
+    recBtn.textContent = `Record again (${Math.ceil(loopSeconds())}s)`;
+    recBtn.classList.remove('recording');
+    saveBtn.hidden = false;
+  };
+
+  // From the top, so the video is exactly one loop starting at the power-on.
+  pageIndex = 0;
+  mix = 0;
+  phase = 'hold';
+  phaseStart = simT;
+  rec = { recorder, c, w, h, start: simT, dur: loopSeconds() + 0.3, shown: -1, stopping: false };
+  recBlob = null;
+  saveBtn.hidden = true;
+  recBtn.textContent = 'Stop';
+  recBtn.classList.add('recording');
+  recorder.start(1000);
+}
+
+function stopRecording() {
+  if (!rec || rec.stopping) return;
+  rec.stopping = true;
+  recStatus.textContent = 'Finishing the file...';
+  rec.recorder.stop();
+}
+
+// recordFrame: the screen's frame, redrawn at the video's size. Line weight
+// and glow scale with the picture so a 1080-wide video looks like the phone.
+function recordFrame(table, p, mv, thin) {
+  const { c, w, h } = rec;
+  const r = Math.min(w, h) * 0.42;
+  const k = r / 160;
+  c.globalAlpha = 1;
+  c.shadowBlur = 0;
+  c.fillStyle = '#030f09';
+  c.fillRect(0, 0, w, h);
+  c.lineJoin = 'round';
+  c.lineCap = 'round';
+  c.strokeStyle = '#6cffb3';
+  c.shadowColor = '#6cffb3';
+  c.lineWidth = (1.6 - 1.0 * thin) * k;
+  c.shadowBlur = (8 - 6 * thin) * k;
+  c.globalAlpha = mv.alpha;
+  drawTable(c, table, p, w, h / 2, r);
+  c.globalAlpha = 1;
+
+  const elapsed = simT - rec.start;
+  const sec = Math.floor(elapsed);
+  if (sec !== rec.shown) {
+    rec.shown = sec;
+    recStatus.textContent = `Recording ${sec} / ${Math.ceil(rec.dur)}s. Keep this screen open.`;
+  }
+  if (elapsed >= rec.dur) stopRecording();
+}
+
+recBtn.addEventListener('click', () => {
+  if (rec) stopRecording();
+  else startRecording();
+});
+
+saveBtn.addEventListener('click', async () => {
+  if (!recBlob) return;
+  const file = new File([recBlob], recName, { type: recBlob.type });
+  // On a phone the share sheet is the way into Photos ("Save Video"); on a
+  // desktop a plain download is what people expect.
+  if (matchMedia('(pointer: coarse)').matches && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] });
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+    }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(recBlob);
+  a.download = recName;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
 });
 
 // --- Timing panel ------------------------------------------------------------
@@ -696,6 +877,7 @@ function showTune(on) {
   if (on) {
     about.hidden = true;
     aboutBtn.classList.remove('active');
+    showVideo(false);
   }
 }
 
