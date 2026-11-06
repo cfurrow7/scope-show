@@ -53,7 +53,8 @@ Double Judy
 // of shows and tuning one is not a redeploy. Reading and writing it lives in
 // show-link.js, where it can be tested without a browser.
 const N = 1024;                // samples per shape table, matches the instrument
-const SOLID_FPS = 30;          // how often a turning solid is rebuilt
+const SOLID_FPS = 60;          // how often a turning solid is rebuilt (screen rate)
+const POST_FPS = 30;           // how often a new table is sent to the audio
 
 const tuning = parseShowLink(location.hash, MESSAGE);
 let message = tuning.message;
@@ -354,7 +355,7 @@ let lastPostedAt = -1;
 function pushTable(table, live) {
   if (!workletNode) return;
   if (!live && table === lastPosted) return;
-  if (live && simT - lastPostedAt < 1 / SOLID_FPS) return;
+  if (live && simT - lastPostedAt < 1 / POST_FPS) return;
   workletNode.port.postMessage({ type: 'shape', x: table.x, y: table.y });
   lastPosted = table;
   lastPostedAt = simT;
@@ -516,6 +517,10 @@ function jumpThreshold(table) {
 // what the tube would.
 function drawTable(table, p, w, cy, r) {
   const path = new Path2D();
+  // All the jumps go into one path and are stroked once. Stroked one by one,
+  // each paid its own glow blur, and a static burst (hundreds of jumps) put
+  // 700+ blurred strokes in a single frame: the stutter at every transition.
+  const jumps = new Path2D();
   let prevX = 0, prevY = 0, prevPx = 0, prevPy = 0;
   const windowSeconds = 1 / p.traceFreqHz;
   const jump = jumpThreshold(table);
@@ -531,19 +536,18 @@ function drawTable(table, p, w, cy, r) {
     if (i === 0) {
       path.moveTo(px, py);
     } else if (Math.hypot(x - prevX, y - prevY) > jump) {
-      const jump = new Path2D();
-      jump.moveTo(prevPx, prevPy);
-      jump.lineTo(px, py);
-      ctx.save();
-      ctx.globalAlpha = JUMP_ALPHA;
-      ctx.stroke(jump);
-      ctx.restore();
+      jumps.moveTo(prevPx, prevPy);
+      jumps.lineTo(px, py);
       path.moveTo(px, py);
     } else {
       path.lineTo(px, py);
     }
     prevX = x; prevY = y; prevPx = px; prevPy = py;
   }
+  ctx.save();
+  ctx.globalAlpha *= JUMP_ALPHA;
+  ctx.stroke(jumps);
+  ctx.restore();
   ctx.stroke(path);
 }
 
