@@ -1,0 +1,243 @@
+* { box-sizing: border-box; margin: 0; }
+
+html, body {
+  height: 100%;
+  background: #060b08;
+  color: #ece6da;
+  font-family: -apple-system, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body { overflow: hidden; }
+
+/* --- Opening panel ------------------------------------------------------- */
+
+#open-overlay {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px; padding: 32px 26px calc(32px + env(safe-area-inset-bottom, 0px));
+  text-align: center;
+  background:
+    radial-gradient(120% 90% at 50% 42%, #0d2018 0%, #060b08 62%);
+}
+#open-overlay[hidden] { display: none; }
+
+
+
+#open-overlay h1 {
+  font-size: clamp(27px, 8vw, 40px);
+  font-weight: 500; letter-spacing: 0.01em; line-height: 1.1;
+  color: #6cffb3;
+  text-shadow: 0 0 22px rgba(108, 255, 179, 0.4);
+}
+
+.blurb {
+  max-width: 33ch; font-size: 15.5px; line-height: 1.66; color: #b6c4bb;
+}
+
+#open-btn {
+  margin-top: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px; text-transform: uppercase; letter-spacing: 0.16em;
+  padding: 15px 40px; border-radius: 7px;
+  border: 1px solid #6cffb3; background: transparent; color: #6cffb3;
+  cursor: pointer;
+  transition: background 140ms ease, box-shadow 140ms ease;
+}
+#open-btn:hover { background: rgba(108, 255, 179, 0.09); box-shadow: 0 0 24px rgba(108, 255, 179, 0.2); }
+#open-btn:active { background: rgba(108, 255, 179, 0.16); }
+
+.note { font-size: 11.5px; color: #5d6b63; letter-spacing: 0.02em; }
+
+/* --- Scope stage --------------------------------------------------------- */
+
+#stage[hidden] { display: none; }
+
+#scope {
+  position: fixed; inset: 0; width: 100%; height: 100%;
+  display: block; background: #030f09;
+}
+
+#bar {
+  /* Above both slide-up panels, not below them: the panels are full-width and
+     reach the bottom edge, so a lower bar would be painted over by the very
+     panel its button has to close. */
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 8;
+  /* Four controls do not fit one phone-width row; let them wrap rather than
+     shrinking the labels into abbreviations nobody can read. */
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center;
+  padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to top, rgba(3, 15, 9, 0.94), rgba(3, 15, 9, 0));
+}
+
+#bar button, #build-btn {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em;
+  padding: 11px 14px; border-radius: 6px;
+  border: 1px solid #3d4a42; background: rgba(15, 26, 20, 0.9); color: #cfe0d6;
+  cursor: pointer; flex: 0 1 auto;
+}
+#bar button.active { border-color: #6cffb3; color: #6cffb3; }
+#build-btn { text-decoration: none; display: inline-block; }
+
+/* All four fit one row on a wide screen. On a phone they wrap, and left to
+   itself the "?" ends up alone on the second row looking like a mistake, so
+   below this width the break forces a deliberate 2 + 2. */
+.bar-break { display: none; }
+@media (max-width: 520px) {
+  .bar-break { display: block; flex-basis: 100%; height: 0; }
+}
+#build-btn:hover { border-color: #6cffb3; color: #6cffb3; }
+#about-btn { flex: 0 0 auto; width: 40px; padding: 11px 0; }
+
+#about {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
+  max-height: 72vh; overflow-y: auto; touch-action: pan-y;
+  padding: 22px 22px calc(124px + env(safe-area-inset-bottom, 0px));
+  background: rgba(6, 13, 9, 0.97);
+  border-top: 1px solid #2b3831;
+  font-size: 13.5px; line-height: 1.66; color: #9aa8a0;
+  display: flex; flex-direction: column; gap: 14px;
+}
+#about[hidden] { display: none; }
+#about b { color: #6cffb3; font-weight: 500; }
+
+@media (prefers-reduced-motion: reduce) {
+  #open-btn { transition: none; }
+}
+
+
+/* Setup steps in the intro: present but folded away, so the opening stays an
+   invitation rather than a manual. */
+.setup { width: 100%; max-width: 34ch; text-align: left; }
+/* The summary is the button: bordered like the primary action but quieter, so
+   it reads as a second option rather than a link buried in the copy. */
+.setup summary {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: #9aa8a0; cursor: pointer; list-style: none;
+  display: block; width: fit-content; margin: 0 auto;
+  padding: 11px 22px; border: 1px solid #3d4a42; border-radius: 6px;
+  background: rgba(15, 26, 20, 0.6);
+}
+.setup summary::-webkit-details-marker { display: none; }
+.setup summary:hover { color: #6cffb3; border-color: #6cffb3; }
+.setup[open] summary { color: #6cffb3; border-color: #6cffb3; margin-bottom: 12px; }
+.setup-body { max-height: 40vh; overflow-y: auto; touch-action: pan-y;
+  padding: 4px 2px 8px; }
+
+ol.scope { margin: 0; padding-left: 20px; display: flex;
+  flex-direction: column; gap: 8px; font-size: 13px; line-height: 1.6;
+  color: #9aa8a0; }
+ol.scope li { padding-left: 2px; }
+ol.scope b { color: #6cffb3; font-weight: 500; }
+
+#mono-warn {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 7;
+  margin: 0; padding: 14px 18px calc(104px + env(safe-area-inset-bottom, 0px));
+  background: rgba(46, 18, 10, 0.96); border-top: 1px solid #a5502c;
+  color: #ffcdb5; font-size: 13px; line-height: 1.55;
+}
+#mono-warn[hidden] { display: none; }
+#mono-warn b { color: #ff8a5c; }
+#audio-readout { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #6cffb3; }
+#audio-readout.bad { color: #ff8a5c; }
+
+/* --- Timing panel -------------------------------------------------------- */
+
+#tune {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
+  max-height: 72vh; overflow-y: auto; touch-action: pan-y;
+  /* The bar sits on top of this panel and wraps to two rows on a phone, so the
+     reserved strip at the bottom has to clear two rows, not one. */
+  padding: 20px 22px calc(124px + env(safe-area-inset-bottom, 0px));
+  background: rgba(6, 13, 9, 0.97);
+  border-top: 1px solid #2b3831;
+  display: flex; flex-direction: column; gap: 14px;
+  font-size: 13px; color: #9aa8a0;
+}
+#tune[hidden] { display: none; }
+
+#tune label {
+  display: grid; grid-template-columns: 8.5em 1fr 3.4em; align-items: center;
+  gap: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #cfe0d6;
+}
+#tune label.msg {
+  display: flex; flex-direction: column; gap: 8px; align-items: stretch;
+}
+#tune span { text-align: right; color: #6cffb3; font-variant-numeric: tabular-nums; }
+
+#tune input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 26px; background: transparent; margin: 0;
+}
+#tune input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px; border-radius: 2px; background: #2b3831;
+}
+#tune input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 20px; height: 20px; margin-top: -8.5px; border-radius: 50%;
+  background: #6cffb3; border: none;
+}
+#tune input[type="range"]::-moz-range-track { height: 3px; background: #2b3831; }
+#tune input[type="range"]::-moz-range-thumb {
+  width: 20px; height: 20px; border: none; border-radius: 50%; background: #6cffb3;
+}
+
+#tune label#retro-row, #tune label#fx-row, #tune label#move-row { grid-template-columns: 8.5em 1fr; }
+#tune label[hidden] { display: none; }
+#tempo-row {
+  display: grid; grid-template-columns: 8.5em 1fr 7.5em; align-items: center; gap: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #cfe0d6;
+}
+#tune .tempo-label { text-align: left; color: #cfe0d6; }
+#tune label.bpm-box { display: flex; align-items: center; gap: 6px; white-space: nowrap; color: #6cffb3; }
+#bpm-out {
+  width: 3.6em; padding: 8px 6px; border-radius: 6px; text-align: center;
+  border: 1px solid #3d4a42; background: rgba(3, 15, 9, 0.9); color: #ece6da;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px;
+  -moz-appearance: textfield;
+}
+#bpm-out::-webkit-inner-spin-button, #bpm-out::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+#bpm-out:focus { outline: none; border-color: #6cffb3; }
+#tap-btn {
+  padding: 12px; border-radius: 6px; border: 1px solid #3d4a42;
+  background: rgba(3, 15, 9, 0.9); color: #6cffb3;
+  font: inherit; letter-spacing: 0.12em; text-transform: uppercase;
+  touch-action: manipulation; -webkit-user-select: none; user-select: none;
+}
+#tap-btn.hit { border-color: #6cffb3; background: rgba(108, 255, 179, 0.15); }
+#tune select {
+  -webkit-appearance: none; appearance: none;
+  padding: 8px 10px; border-radius: 6px;
+  border: 1px solid #3d4a42; background: rgba(3, 15, 9, 0.9); color: #ece6da;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
+}
+#tune select:focus { outline: none; border-color: #6cffb3; }
+
+#tune textarea {
+  width: 100%; resize: vertical;
+  padding: 10px 12px; border-radius: 6px;
+  border: 1px solid #3d4a42; background: rgba(3, 15, 9, 0.9); color: #ece6da;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px; line-height: 1.5; letter-spacing: 0.02em; text-transform: none;
+}
+#tune textarea:focus { outline: none; border-color: #6cffb3; }
+
+#copy-btn {
+  align-self: flex-start;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em;
+  padding: 11px 16px; border-radius: 6px;
+  border: 1px solid #6cffb3; background: transparent; color: #6cffb3;
+  cursor: pointer;
+}
+
+#msg-warn { color: #ffcdb5; font-size: 12px; line-height: 1.5; }
+#msg-warn[hidden] { display: none; }
+.tune-note { font-size: 12px; line-height: 1.55; color: #6a7d72; }

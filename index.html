@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>For your oscilloscope</title>
+<meta name="description" content="A message paged out on an oscilloscope. Every line is a sound.">
+<meta property="og:title" content="For your oscilloscope">
+<meta property="og:description" content="A message paged out on an oscilloscope: every line is a sound, and the words turn into a cube between them.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#060b08">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=&apos;http://www.w3.org/2000/svg&apos; viewBox=&apos;0 0 32 32&apos;%3E%3Crect width=&apos;32&apos; height=&apos;32&apos; fill=&apos;%23030f09&apos;/%3E%3Crect x=&apos;8&apos; y=&apos;8&apos; width=&apos;13&apos; height=&apos;13&apos; fill=&apos;none&apos; stroke=&apos;%236cffb3&apos; stroke-width=&apos;2&apos;/%3E%3Crect x=&apos;12&apos; y=&apos;12&apos; width=&apos;13&apos; height=&apos;13&apos; fill=&apos;none&apos; stroke=&apos;%236cffb3&apos; stroke-width=&apos;2&apos;/%3E%3C/svg%3E">
+<link rel="stylesheet" href="show.css">
+</head>
+<body>
+
+<div id="open-overlay">
+  <h1>For your oscilloscope</h1>
+  <p class="blurb">
+    Every line you are about to see is a sound. Two of them, actually: one
+    steering left and right, one steering up and down. Feed them to a scope in
+    XY mode and it draws them. Your screen is standing in for the tube until
+    then.
+  </p>
+  <button id="open-btn" type="button">Play it</button>
+  <!-- A <details> rather than a button plus script: the summary is styled as
+       the button, and the open/close behaviour comes free and works without JS. -->
+  <details class="setup">
+    <summary>Hooking up a scope</summary>
+    <div class="setup-body" data-scope-steps></div>
+  </details>
+
+  <p class="note">Sound optional on screen, required on a scope.</p>
+</div>
+
+<template id="scope-steps">
+  <ol class="scope">
+    <li><b>Start with the volume LOW,</b> around a quarter, with EQ and spatial
+      audio off. On a scope the volume knob is the size control, and most
+      phones at full output will push the picture clean off the tube.</li>
+    <li><b>Display mode: XY.</b> On some scopes it is a button, on older ones
+      it is a Display selector reading A vs B. That is the whole trick: it
+      stops the sweep so the two inputs steer the beam instead. Time/Div then
+      does nothing, so leave it wherever it is.</li>
+    <li><b>Wiring,</b> from a 3.5&nbsp;mm plug: tip (left channel) to the
+      horizontal input, ring (right channel) to the vertical input, and the
+      sleeve to ground. If your scope has a differential input pair per
+      channel, the sleeve goes to <b>both</b> minus jacks.</li>
+    <li><b>Coupling: DC, on every input.</b> AC coupling eats the slow parts of
+      the signal and warps the lettering. If your inputs have an OFF position,
+      one left on OFF kills that axis with no other symptom.</li>
+    <li><b>Volts/Div: matched on both channels,</b> starting at the least
+      sensitive end, and both verniers clicked into CAL. Mismatched ranges
+      stretch the picture one way.</li>
+    <li><b>Now bring the volume up slowly</b> until the words fill about two
+      thirds of the screen. Intensity low until something is moving, then
+      focus.</li>
+    <li><b>Leave the mic off.</b> The reactive mode needs the microphone, and
+      phones drop the output to mono the moment a page takes it. Mono sends the
+      same signal to both axes, which draws one 45&deg; diagonal line and looks
+      convincingly like a wiring fault.</li>
+    <li>If the words come out sideways or mirrored, swap the two leads between
+      the vertical and horizontal inputs.</li>
+  </ol>
+</template>
+
+<main id="stage" hidden>
+  <canvas id="scope"></canvas>
+  <div id="mono-warn" hidden>
+    <b>Your phone is sending mono.</b> Both axes are getting the same signal, so
+    a scope will draw one diagonal line instead of a picture. Turn the mic off
+    and reload, and check Settings &rsaquo; Accessibility &rsaquo; Audio &amp;
+    Visual &rsaquo; Mono Audio is off.
+  </div>
+  <div id="bar">
+    <button id="tone-btn" type="button">Hear it</button>
+    <button id="listen-btn" type="button">Turn on mic</button>
+    <span class="bar-break" aria-hidden="true"></span>
+    <button id="tune-btn" type="button">Timing</button>
+    <a id="build-btn" href="https://lissajous-scope.netlify.app" target="_blank" rel="noopener">Build your own</a>
+    <button id="about-btn" type="button" aria-label="About this page">?</button>
+  </div>
+  <!-- The timing panel is the authoring surface: dial the pacing, edit the
+       message, copy the link. Every change is written straight into the URL,
+       so the link IS the saved state and there is nothing else to save. -->
+  <div id="tune" hidden>
+    <label>Line time <input type="range" id="hold-slider" min="1" max="10" step="0.1"><span id="hold-out"></span></label>
+    <label>Shape time <input type="range" id="solid-slider" min="1" max="10" step="0.1"><span id="solid-out"></span></label>
+    <label>Transition <input type="range" id="morph-slider" min="0.2" max="3" step="0.05"><span id="morph-out"></span></label>
+    <label id="move-row">Movement
+      <select id="move-style">
+        <option value="pulse">Pulse</option>
+        <option value="slide-x">Slide left / right</option>
+        <option value="slide-y">Slide up / down</option>
+        <option value="float">Float</option>
+        <option value="flicker">Neon flicker</option>
+        <option value="shake">Shake</option>
+        <option value="none">None</option>
+      </select>
+    </label>
+    <label>Intensity <input type="range" id="move-amt" min="0" max="100" step="1"><span id="move-out"></span></label>
+    <label id="fx-row">Between pages
+      <select id="fx-style">
+        <option value="morph">Morph</option>
+        <option value="static">Static burst</option>
+        <option value="warp">Warp</option>
+      </select>
+    </label>
+    <label id="rate-row">Trace rate
+      <select id="trace-rate">
+        <option value="50">50 Hz (cleanest, may flicker)</option>
+        <option value="60">60 Hz</option>
+        <option value="75">75 Hz (default)</option>
+        <option value="100">100 Hz</option>
+        <option value="150">150 Hz (old setting)</option>
+      </select>
+    </label>
+    <div id="tempo-row">
+      <span class="tempo-label">Tempo</span>
+      <button id="tap-btn" type="button">Tap</button>
+      <label class="bpm-box"><input id="bpm-out" type="number" inputmode="numeric" min="40" max="200" step="1" aria-label="BPM"> bpm</label>
+    </div>
+    <label id="retro-row" hidden>Retrospects
+      <select id="retro-style">
+        <option value="album">Album art</option>
+        <option value="text">Plain text</option>
+      </select>
+    </label>
+    <label class="msg">Message, one line per page. A line with just * puts a spiral there (or * triangle, * square, * circle, * sun, * wave, * mirrorball, * henry, * retrospects, * cube, * pyramid)
+      <textarea id="msg-input" rows="6" spellcheck="false"></textarea>
+    </label>
+    <p id="msg-warn" hidden></p>
+    <button id="copy-btn" type="button">Copy link</button>
+    <p class="tune-note">The link carries whatever is set here, so send it and
+      the other end sees this pacing and this message.</p>
+  </div>
+  <div id="about" hidden>
+    <p><b>Hear it</b> plays the actual signal that draws the shape. It is a raw
+    two-channel tone, not a tune. Wear headphones and the left ear is the
+    horizontal axis, the right ear is the vertical.</p>
+    <p>Audio out: <span id="audio-readout">not started</span>. Two channels is
+    what you want; one means the phone is downmixing and a scope will only draw
+    a diagonal line.</p>
+    <p><b>Turn on mic</b> makes the drawing sound-reactive: whatever is playing
+    in the room pushes it around, bass swelling it and treble roughening the
+    edges. <b>Leave it off if you are driving a real oscilloscope,</b> because
+    taking the microphone is what collapses the output to mono. Nothing is
+    recorded and nothing leaves your device.</p>
+    <p>Between the lines the words collapse into a wireframe cube or pyramid
+    and come back out as the next line. The solid is turning in three
+    dimensions, and the beam is drawing every edge of it in order, the same way
+    it draws the letters.</p>
+    <p><b>Build your own</b> opens the instrument this runs on. Drag to change
+    the figure, pinch to square it off, type a message or draw one with a
+    finger.</p>
+    <p><b>On a real oscilloscope</b> this is not a picture of anything, it is
+    the signal itself:</p>
+    <div data-scope-steps></div>
+  </div>
+</main>
+
+<script type="module" src="show.js"></script>
+</body>
+</html>
